@@ -1,12 +1,14 @@
+use bevy::ecs::event::Events;
 use bevy::math::*;
 use bevy::prelude::*;
+use bevy::window::WindowResized;
 
 use crate::util::clamp;
 
 mod util;
 
-const ARENA_WIDTH: u32 = 4;
-const ARENA_HEIGHT: u32 = 4;
+const ARENA_WIDTH: u32 = 20;
+const ARENA_HEIGHT: u32 = 16;
 
 struct Materials {
     sokoban_atlas: Handle<TextureAtlas>,
@@ -41,6 +43,20 @@ fn setup(
     });
 }
 
+fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands) {
+    for event in events.iter() {
+        commands.insert_resource(Grid {
+            bounds: IVec2::new(ARENA_WIDTH as i32, ARENA_HEIGHT as i32),
+            size: 64,
+            base_world_pos: Vec3::new(
+                50.0 - event.width / 2.0,
+                50.0 - event.height / 2.0,
+                0.0,
+            ),
+        });
+    }
+}
+
 #[derive(Component)]
 struct Player;
 
@@ -73,7 +89,6 @@ fn movement_input(
     } else if keyboard_input.just_pressed(KeyCode::Down) {
         position.y = clamp(position.y - 1, 0, grid.bounds.y as i32 - 1);
     }
-
 }
 
 fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
@@ -112,10 +127,10 @@ fn snap_player_to_grid(mut players: Query<(&mut Transform, &Position)>, grid: Re
 
     transform.translation = grid.base_world_pos
         + Vec3::new(
-            (position.x * grid.size) as f32,
-            (position.y * grid.size) as f32,
-            0.,
-        )
+        (position.x * grid.size) as f32,
+        (position.y * grid.size) as f32,
+        0.,
+    )
 }
 
 fn main() {
@@ -132,6 +147,7 @@ fn main() {
         .add_startup_system(setup)
         .add_system(movement_input)
         .add_system_to_stage(CoreStage::PostUpdate, snap_player_to_grid)
+        .add_system(window_resize)
         .add_plugins(DefaultPlugins)
         .run()
 }
