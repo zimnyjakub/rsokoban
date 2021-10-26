@@ -1,4 +1,9 @@
+use bevy::math::*;
 use bevy::prelude::*;
+
+use crate::util::clamp;
+
+mod util;
 
 const ARENA_WIDTH: u32 = 4;
 const ARENA_HEIGHT: u32 = 4;
@@ -26,6 +31,7 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    windows: Res<Windows>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
@@ -35,26 +41,48 @@ fn setup(
 
     commands.insert_resource(Materials {
         sokoban_atlas: texture_atlas_handle.clone()
-    })
+    });
+
+    let window = windows.get_primary().unwrap();
+
+    commands.insert_resource(Grid {
+        bounds: UVec2::new(4, 4),
+        grid_size: 64,
+        base_world_pos: Vec3::new(
+            50.0 - window.width() / 2.0,
+            50.0 - window.height() / 2.0,
+            0.0),
+    });
 }
 
 #[derive(Component)]
-struct Player;
+struct Player {
+    pos: UVec2,
+}
+
+struct Grid {
+    bounds: UVec2,
+
+    grid_size: u32,
+    base_world_pos: Vec3,
+}
 
 fn movement_input(
     keyboard_input: Res<Input<KeyCode>>,
-    mut players: Query<(&Player, &mut Transform)>,
+    mut players: Query<&mut Player>,
 ) {
-    if let Some((_player, mut transform)) = players.iter_mut().next() {
-        if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= 2.;
-        } else if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += 2.;
-        } else if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += 2.;
-        } else if keyboard_input.pressed(KeyCode::Down) {
-            transform.translation.y -= 2.;
+    if let Some(mut player) = players.iter_mut().next() {
+        if keyboard_input.just_pressed(KeyCode::Left) {
+            player.pos.x = clamp(player.pos.x - 1, 0, ARENA_WIDTH);
+        } else if keyboard_input.just_pressed(KeyCode::Up) {
+            player.pos.y = clamp(player.pos.y + 1, 0, ARENA_HEIGHT);
+        } else if keyboard_input.just_pressed(KeyCode::Right) {
+            player.pos.x = clamp(player.pos.x + 1, 0, ARENA_WIDTH);
+        } else if keyboard_input.just_pressed(KeyCode::Down) {
+            player.pos.y = clamp(player.pos.y - 1, 0, ARENA_HEIGHT);
         }
+
+        println!("current pos x {} y {}", player.pos.x, player.pos.y)
     }
 }
 
@@ -64,31 +92,28 @@ fn spawn_player(
 ) {
     commands.spawn_bundle(SpriteSheetBundle {
         texture_atlas: materials.sokoban_atlas.clone(),
-        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
         sprite: TextureAtlasSprite::new(52),
         ..Default::default()
     })
-        .insert(Player);
+        .insert(Player { pos: UVec2::new(0, 0) });
 }
 
 fn init_grid(
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    windows: Res<Windows>,
+    grid: Res<Grid>,
 ) {
-    let window = windows.get_primary().unwrap();
-
     //todo extract 64 as some kind of a constant
     //64 is the default size of a tile / cell
-    for x in 0..ARENA_WIDTH {
-        for y in 0..ARENA_HEIGHT {
+    for x in 0..grid.bounds.x {
+        for y in 0..grid.bounds.y {
             commands.spawn_bundle(SpriteBundle {
                 material: materials.add(Color::rgba(0.7, 0.7, 0.7, 0.3).into()),
-                sprite: Sprite::new(Vec2::new(62.0, 62.0)),
-                transform: Transform::from_translation(Vec3::new(
-                    ((x * 64) as f32 - window.width() /2.0)+50.0,
-                    ((y * 64) as f32 - window.height()/2.0)+50.0,
-                    0.0)),
+                sprite: Sprite::new(Vec2::new((grid.grid_size - 2) as f32, (grid.grid_size - 2) as f32)),
+                transform: Transform::from_translation(
+                    grid.base_world_pos +
+                        Vec3::new((x * grid.grid_size) as f32, (y * grid.grid_size) as f32, 0.)
+                ),
                 ..Default::default()
             }).insert(Size::square(0.9));
         }
@@ -105,12 +130,9 @@ fn main() {
         })
         .add_startup_system(setup)
         .add_system(movement_input)
-        .add_startup_stage("game_start", SystemStage::single(spawn_player))
-        .add_startup_system_set(
-            SystemSet::new()
-                .with_system(setup)
-                .with_system(init_grid)
-        )
+        .add_startup_stage("player_spawn", SystemStage::single(spawn_player))
+        .add_startup_stage("grid_init", SystemStage::single(init_grid))
+        .add_startup_system(setup)
         .add_plugins(DefaultPlugins)
         .run()
 }
