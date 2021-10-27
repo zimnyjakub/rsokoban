@@ -7,8 +7,8 @@ use crate::util::clamp;
 
 mod util;
 
-const ARENA_WIDTH: u32 = 20;
-const ARENA_HEIGHT: u32 = 16;
+const ARENA_WIDTH: u32 = 6;
+const ARENA_HEIGHT: u32 = 6;
 
 struct Materials {
     sokoban_atlas: Handle<TextureAtlas>,
@@ -32,7 +32,7 @@ fn setup(
 
     let window = windows.get_primary().unwrap();
 
-    commands.insert_resource(Grid {
+    let grid = Grid {
         bounds: IVec2::new(ARENA_WIDTH as i32, ARENA_HEIGHT as i32),
         size: 64,
         base_world_pos: Vec3::new(
@@ -40,7 +40,22 @@ fn setup(
             50.0 - window.height() / 2.0,
             0.0,
         ),
-    });
+    };
+    let mut walls: Vec<IVec2> = Vec::with_capacity(std::cmp::max(grid.bounds.x as usize, grid.bounds.y as usize));
+
+    for x in 0..grid.bounds.x {
+        walls.push(IVec2::new(x, 0));
+        walls.push(IVec2::new(x, grid.bounds.y -1));
+    }
+    for y in 1..grid.bounds.y {
+        walls.push(IVec2::new(0, y));
+        walls.push(IVec2::new(grid.bounds.x-1, y));
+    }
+    commands.insert_resource(grid);
+    //todo: extract this to file load and support different levels
+    commands.insert_resource(Level {
+        wall_locations: walls
+    })
 }
 
 fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands) {
@@ -61,6 +76,9 @@ fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands)
 struct Player;
 
 #[derive(Component)]
+struct Wall;
+
+#[derive(Component)]
 struct Position {
     x: i32,
     y: i32,
@@ -71,6 +89,10 @@ struct Grid {
 
     size: i32,
     base_world_pos: Vec3,
+}
+
+struct Level {
+    wall_locations: Vec<IVec2>,
 }
 
 fn movement_input(
@@ -99,7 +121,7 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
             ..Default::default()
         })
         .insert(Player)
-        .insert(Position { x: 0, y: 0 });
+        .insert(Position { x: 1, y: 1 });
 }
 
 fn init_grid(
@@ -122,15 +144,30 @@ fn init_grid(
     }
 }
 
-fn snap_player_to_grid(mut players: Query<(&mut Transform, &Position)>, grid: Res<Grid>) {
-    let (mut transform, position) = players.single_mut();
+fn snap_position_to_grid(mut q: Query<(&mut Transform, &Position)>, grid: Res<Grid>) {
+    for (mut transform, position) in q.iter_mut() {
+        transform.translation = grid.base_world_pos
+            + Vec3::new(
+            (position.x * grid.size) as f32,
+            (position.y * grid.size) as f32,
+            0.,
+        );
+    }
+}
 
-    transform.translation = grid.base_world_pos
-        + Vec3::new(
-        (position.x * grid.size) as f32,
-        (position.y * grid.size) as f32,
-        0.,
-    )
+fn init_level(
+    mut commands: Commands,
+    materials: Res<Materials>,
+    level: Res<Level>,
+) {
+    for wall in &level.wall_locations {
+        commands.spawn_bundle(SpriteSheetBundle {
+            texture_atlas: materials.sokoban_atlas.clone(),
+            sprite: TextureAtlasSprite::new(97),
+            ..Default::default()
+        }).insert(Wall)
+            .insert(Position { x: wall.x, y: wall.y });
+    }
 }
 
 fn main() {
@@ -143,10 +180,11 @@ fn main() {
         })
         .add_startup_system(setup)
         .add_startup_stage("player_spawn", SystemStage::single(spawn_player))
-        .add_startup_stage("grid_init", SystemStage::single(init_grid))
+        .add_startup_stage("init_grid", SystemStage::single(init_grid))
+        .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
         .add_system(movement_input)
-        .add_system_to_stage(CoreStage::PostUpdate, snap_player_to_grid)
+        .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
         .run()
