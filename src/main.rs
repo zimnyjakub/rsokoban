@@ -45,16 +45,19 @@ fn setup(
 
     for x in 0..grid.bounds.x {
         walls.push(IVec2::new(x, 0));
-        walls.push(IVec2::new(x, grid.bounds.y -1));
+        walls.push(IVec2::new(x, grid.bounds.y - 1));
     }
     for y in 1..grid.bounds.y {
         walls.push(IVec2::new(0, y));
-        walls.push(IVec2::new(grid.bounds.x-1, y));
+        walls.push(IVec2::new(grid.bounds.x - 1, y));
     }
+
     commands.insert_resource(grid);
     //todo: extract this to file load and support different levels
     commands.insert_resource(Level {
-        wall_locations: walls
+        wall_locations: walls,
+        pushable_locations: vec![IVec2::new(1, 2)],
+        goal_locations: vec![IVec2::new(1, 4)],
     })
 }
 
@@ -79,6 +82,12 @@ struct Player;
 struct Wall;
 
 #[derive(Component)]
+struct Goal;
+
+#[derive(Component)]
+struct Pushable;
+
+#[derive(Component)]
 struct Position {
     x: i32,
     y: i32,
@@ -93,6 +102,8 @@ struct Grid {
 
 struct Level {
     wall_locations: Vec<IVec2>,
+    pushable_locations: Vec<IVec2>,
+    goal_locations: Vec<IVec2>,
 }
 
 fn movement_input(
@@ -165,8 +176,27 @@ fn init_level(
             texture_atlas: materials.sokoban_atlas.clone(),
             sprite: TextureAtlasSprite::new(97),
             ..Default::default()
-        }).insert(Wall)
+        })
+            .insert(Wall)
             .insert(Position { x: wall.x, y: wall.y });
+    }
+    for pushable in &level.pushable_locations {
+        commands.spawn_bundle(SpriteSheetBundle {
+            texture_atlas: materials.sokoban_atlas.clone(),
+            sprite: TextureAtlasSprite::new(1),
+            ..Default::default()
+        })
+            .insert(Pushable)
+            .insert(Position { x: pushable.x, y: pushable.y });
+    }
+    for goal in &level.goal_locations {
+        commands.spawn_bundle(SpriteSheetBundle {
+            texture_atlas: materials.sokoban_atlas.clone(),
+            sprite: TextureAtlasSprite::new(3*24+2),
+            ..Default::default()
+        })
+            .insert(Goal)
+            .insert(Position { x: goal.x, y: goal.y });
     }
 }
 
