@@ -130,7 +130,7 @@ fn movement_input(
     }
 }
 
-fn wall_collision(
+fn process_movement(
     mut commands: Commands,
     mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position), (Added<IntendedPosition>, Without<Wall>)>,
     walls: Query<&Position, With<Wall>>,
@@ -147,7 +147,7 @@ fn wall_collision(
     }
 }
 
-fn process_pushable(
+fn check_pushable(
     mut commands: Commands,
     wants_to_move: Query<(&IntendedPosition, &Position), (Added<IntendedPosition>, Without<Pushable>, With<Player>)>,
     pushables: Query<(Entity, &Position), With<Pushable>>,
@@ -240,6 +240,13 @@ fn init_level(
     }
 }
 
+#[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum SokobanStages {
+    Input,
+    Movement,
+    PushableDetection,
+}
+
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
@@ -253,9 +260,9 @@ fn main() {
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
         .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
-        .add_system(movement_input)
-        .add_system(process_pushable)
-        .add_system(wall_collision)
+        .add_system(movement_input.label(SokobanStages::Input).before(SokobanStages::PushableDetection))
+        .add_system(check_pushable.label(SokobanStages::PushableDetection).before(SokobanStages::Movement))
+        .add_system(process_movement.label(SokobanStages::Movement))
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
