@@ -7,8 +7,8 @@ use crate::util::clamp;
 
 mod util;
 
-const ARENA_WIDTH: u32 = 6;
-const ARENA_HEIGHT: u32 = 6;
+const ARENA_WIDTH: u32 = 10;
+const ARENA_HEIGHT: u32 = 10;
 
 struct Materials {
     sokoban_atlas: Handle<TextureAtlas>,
@@ -56,7 +56,7 @@ fn setup(
     //todo: extract this to file load and support different levels
     commands.insert_resource(Level {
         wall_locations: walls,
-        pushable_locations: vec![IVec2::new(1, 2)],
+        pushable_locations: vec![IVec2::new(2, 2)],
         goal_locations: vec![IVec2::new(1, 4)],
     })
 }
@@ -130,20 +130,37 @@ fn movement_input(
     }
 }
 
-fn movement_process(
+fn wall_collision(
     mut commands: Commands,
-    mut added: Query<(Entity, &IntendedPosition, &mut Position), (Added<IntendedPosition>, Without<Wall>)>,
+    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position), (Added<IntendedPosition>, Without<Wall>)>,
     walls: Query<&Position, With<Wall>>,
 ) {
-    for (ent, int_pos, mut pos) in added.iter_mut() {
+    for (ent, int_pos, mut pos) in wants_to_move.iter_mut() {
         if !walls.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
-            println!("no wall, moving");
             pos.x = int_pos.x;
             pos.y = int_pos.y;
         } else {
             println!("wall collided, not moving");
         }
+
         commands.entity(ent).remove::<IntendedPosition>();
+    }
+}
+
+fn process_pushable(
+    mut commands: Commands,
+    wants_to_move: Query<(&IntendedPosition, &Position), (Added<IntendedPosition>, Without<Pushable>, With<Player>)>,
+    pushables: Query<(Entity, &Position), With<Pushable>>,
+) {
+    for (int_pos, pos) in wants_to_move.iter() {
+        let pushable = pushables.iter().find(|(entity, pushable)| int_pos.x == pushable.x && int_pos.y == pushable.y);
+        if let Some((ent, pushable)) = pushable {
+            println!("found pushable, i am at x:{} y:{}, pushable at x:{}, y:{}", pos.x, pos.y, pushable.x, pushable.y);
+            commands.entity(ent).insert(IntendedPosition {
+                x: pushable.x + (pushable.x - pos.x),
+                y: pushable.y + (pushable.y - pos.y)
+            });
+        }
     }
 }
 
@@ -237,7 +254,8 @@ fn main() {
         .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
         .add_system(movement_input)
-        .add_system(movement_process)
+        .add_system(process_pushable)
+        .add_system(wall_collision)
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
