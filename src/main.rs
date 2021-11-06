@@ -132,15 +132,19 @@ fn movement_input(
 
 fn movement_process(
     mut commands: Commands,
-    added: Query<(Entity, &IntendedPosition), Added<IntendedPosition>>,
-    walls: Query<Position, With<Wall>>,
+    mut added: Query<(Entity, &IntendedPosition, &mut Position), (Added<IntendedPosition>, Without<Wall>)>,
+    walls: Query<&Position, With<Wall>>,
 ) {
-    for (ent, int_pos) in added.iter() {
-
-        //todo process intended positions
+    for (ent, int_pos, mut pos) in added.iter_mut() {
+        if !walls.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
+            println!("no wall, moving");
+            pos.x = int_pos.x;
+            pos.y = int_pos.y;
+        } else {
+            println!("wall collided, not moving");
+        }
         commands.entity(ent).remove::<IntendedPosition>();
     }
-
 }
 
 fn init_player(mut commands: Commands, materials: Res<Materials>) {
