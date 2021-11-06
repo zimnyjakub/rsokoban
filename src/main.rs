@@ -75,7 +75,7 @@ fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands)
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct Player;
 
 #[derive(Component)]
@@ -87,8 +87,14 @@ struct Goal;
 #[derive(Component)]
 struct Pushable;
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 struct Position {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Component)]
+struct IntendedPosition {
     x: i32,
     y: i32,
 }
@@ -107,24 +113,37 @@ struct Level {
 }
 
 fn movement_input(
+    mut commands: Commands,
     keyboard_input: Res<Input<KeyCode>>,
-    mut players: Query<&mut Position, With<Player>>,
-    grid: Res<Grid>,
+    player: Query<(Entity, &Position), With<Player>>,
 ) {
-    let mut position = players.single_mut();
-
-    if keyboard_input.just_pressed(KeyCode::Left) {
-        position.x = clamp(position.x - 1, 0, grid.bounds.x as i32 - 1);
-    } else if keyboard_input.just_pressed(KeyCode::Up) {
-        position.y = clamp(position.y + 1, 0, grid.bounds.y as i32 - 1);
-    } else if keyboard_input.just_pressed(KeyCode::Right) {
-        position.x = clamp(position.x + 1, 0, grid.bounds.x as i32 - 1);
-    } else if keyboard_input.just_pressed(KeyCode::Down) {
-        position.y = clamp(position.y - 1, 0, grid.bounds.y as i32 - 1);
+    for (entity, pos) in player.iter() {
+        if keyboard_input.just_pressed(KeyCode::Left) {
+            commands.entity(entity).insert(IntendedPosition { x: pos.x - 1, y: pos.y });
+        } else if keyboard_input.just_pressed(KeyCode::Up) {
+            commands.entity(entity).insert(IntendedPosition { x: pos.x, y: pos.y + 1 });
+        } else if keyboard_input.just_pressed(KeyCode::Right) {
+            commands.entity(entity).insert(IntendedPosition { x: pos.x + 1, y: pos.y });
+        } else if keyboard_input.just_pressed(KeyCode::Down) {
+            commands.entity(entity).insert(IntendedPosition { x: pos.x, y: pos.y - 1 });
+        }
     }
 }
 
-fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
+fn movement_process(
+    mut commands: Commands,
+    added: Query<(Entity, &IntendedPosition), Added<IntendedPosition>>,
+    walls: Query<Position, With<Wall>>,
+) {
+    for (ent, int_pos) in added.iter() {
+
+        //todo process intended positions
+        commands.entity(ent).remove::<IntendedPosition>();
+    }
+
+}
+
+fn init_player(mut commands: Commands, materials: Res<Materials>) {
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: materials.sokoban_atlas.clone(),
@@ -192,7 +211,7 @@ fn init_level(
     for goal in &level.goal_locations {
         commands.spawn_bundle(SpriteSheetBundle {
             texture_atlas: materials.sokoban_atlas.clone(),
-            sprite: TextureAtlasSprite::new(3*24+2),
+            sprite: TextureAtlasSprite::new(3 * 24 + 2),
             ..Default::default()
         })
             .insert(Goal)
@@ -209,11 +228,12 @@ fn main() {
             ..Default::default()
         })
         .add_startup_system(setup)
-        .add_startup_stage("player_spawn", SystemStage::single(spawn_player))
+        .add_startup_stage("init_player", SystemStage::single(init_player))
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
         .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
         .add_system(movement_input)
+        .add_system(movement_process)
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
