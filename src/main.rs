@@ -56,7 +56,7 @@ fn setup(
     //todo: extract this to file load and support different levels
     commands.insert_resource(Level {
         wall_locations: walls,
-        pushable_locations: vec![IVec2::new(2, 2)],
+        pushable_locations: vec![IVec2::new(2, 2), IVec2::new(3, 3), IVec2::new(3, 4)],
         goal_locations: vec![IVec2::new(1, 4)],
     })
 }
@@ -79,7 +79,7 @@ fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands)
 struct Player;
 
 #[derive(Component)]
-struct Wall;
+struct Obstacle;
 
 #[derive(Component)]
 struct Goal;
@@ -98,6 +98,8 @@ struct IntendedPosition {
     x: i32,
     y: i32,
 }
+
+struct PlayerMovedEvent;
 
 struct Grid {
     bounds: IVec2,
@@ -130,39 +132,62 @@ fn movement_input(
     }
 }
 
-fn process_movement(
+fn move_pushables(
     mut commands: Commands,
-    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position), (Added<IntendedPosition>, Without<Wall>)>,
-    walls: Query<&Position, With<Wall>>,
+    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Pushable), Without<Obstacle>>,
+    obstacles: Query<&Position, Or<(With<Obstacle>, With<Pushable>)>>,
+    mut move_reader: EventReader<PlayerMovedEvent>,
 ) {
-    for (ent, int_pos, mut pos) in wants_to_move.iter_mut() {
-        if !walls.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
+    if move_reader.iter().next().is_some() {
+        for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
+            if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
+                pos.x = int_pos.x;
+                pos.y = int_pos.y;
+            } else {
+                println!("pushable: wall collided, not moving");
+            }
+
+            commands.entity(ent).remove::<IntendedPosition>();
+        }
+    }
+}
+
+fn move_player(
+    mut commands: Commands,
+    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Player), Without<Obstacle>>,
+    obstacles: Query<&Position, Or<(With<Obstacle>, With<Pushable>)>>,
+    mut move_writer: EventWriter<PlayerMovedEvent>,
+) {
+    for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
+        if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
             pos.x = int_pos.x;
             pos.y = int_pos.y;
         } else {
-            println!("wall collided, not moving");
+            //todo bug here
+            println!("PLAYER wall collided, not moving");
         }
 
+        move_writer.send(PlayerMovedEvent);
         commands.entity(ent).remove::<IntendedPosition>();
     }
 }
 
 fn check_pushable(
     mut commands: Commands,
-    wants_to_move: Query<(&IntendedPosition, &Position), (Added<IntendedPosition>, Without<Pushable>, With<Player>)>,
+    wants_to_move: Query<(&IntendedPosition, &Position), (Without<Pushable>, With<Player>)>,
     pushables: Query<(Entity, &Position), With<Pushable>>,
 ) {
     for (int_pos, pos) in wants_to_move.iter() {
         let pushable = pushables.iter().find(|(entity, pushable)| int_pos.x == pushable.x && int_pos.y == pushable.y);
         if let Some((ent, pushable)) = pushable {
-            println!("found pushable, i am at x:{} y:{}, pushable at x:{}, y:{}", pos.x, pos.y, pushable.x, pushable.y);
             commands.entity(ent).insert(IntendedPosition {
                 x: pushable.x + (pushable.x - pos.x),
-                y: pushable.y + (pushable.y - pos.y)
+                y: pushable.y + (pushable.y - pos.y),
             });
         }
     }
 }
+
 
 fn init_player(mut commands: Commands, materials: Res<Materials>) {
     commands
@@ -217,7 +242,7 @@ fn init_level(
             sprite: TextureAtlasSprite::new(97),
             ..Default::default()
         })
-            .insert(Wall)
+            .insert(Obstacle)
             .insert(Position { x: wall.x, y: wall.y });
     }
     for pushable in &level.pushable_locations {
@@ -243,7 +268,8 @@ fn init_level(
 #[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SokobanStages {
     Input,
-    Movement,
+    MovementPushable,
+    MovementPlayer,
     PushableDetection,
 }
 
@@ -255,14 +281,16 @@ fn main() {
             height: 480.0,
             ..Default::default()
         })
+        .add_event::<PlayerMovedEvent>()
         .add_startup_system(setup)
         .add_startup_stage("init_player", SystemStage::single(init_player))
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
         .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
-        .add_system(movement_input.label(SokobanStages::Input).before(SokobanStages::PushableDetection))
-        .add_system(check_pushable.label(SokobanStages::PushableDetection).before(SokobanStages::Movement))
-        .add_system(process_movement.label(SokobanStages::Movement))
+        .add_system(movement_input.label(SokobanStages::Input))
+        .add_system(check_pushable.label(SokobanStages::PushableDetection))
+        .add_system(move_pushables.label(SokobanStages::MovementPushable))
+        .add_system(move_player.label(SokobanStages::MovementPlayer))
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
