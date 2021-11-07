@@ -99,8 +99,6 @@ struct IntendedPosition {
     y: i32,
 }
 
-struct PlayerMovedEvent;
-
 struct Grid {
     bounds: IVec2,
 
@@ -136,19 +134,16 @@ fn move_pushables(
     mut commands: Commands,
     mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Pushable), Without<Obstacle>>,
     obstacles: Query<&Position, Or<(With<Obstacle>, With<Pushable>)>>,
-    mut move_reader: EventReader<PlayerMovedEvent>,
 ) {
-    if move_reader.iter().next().is_some() {
-        for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
-            if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
-                pos.x = int_pos.x;
-                pos.y = int_pos.y;
-            } else {
-                println!("pushable: wall collided, not moving");
-            }
-
-            commands.entity(ent).remove::<IntendedPosition>();
+    for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
+        if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
+            pos.x = int_pos.x;
+            pos.y = int_pos.y;
+        } else {
+            println!("pushable: wall collided, not moving");
         }
+
+        commands.entity(ent).remove::<IntendedPosition>();
     }
 }
 
@@ -156,7 +151,6 @@ fn move_player(
     mut commands: Commands,
     mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Player), Without<Obstacle>>,
     obstacles: Query<&Position, Or<(With<Obstacle>, With<Pushable>)>>,
-    mut move_writer: EventWriter<PlayerMovedEvent>,
 ) {
     for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
         if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
@@ -167,7 +161,6 @@ fn move_player(
             println!("PLAYER wall collided, not moving");
         }
 
-        move_writer.send(PlayerMovedEvent);
         commands.entity(ent).remove::<IntendedPosition>();
     }
 }
@@ -281,7 +274,6 @@ fn main() {
             height: 480.0,
             ..Default::default()
         })
-        .add_event::<PlayerMovedEvent>()
         .add_startup_system(setup)
         .add_startup_stage("init_player", SystemStage::single(init_player))
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
