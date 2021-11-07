@@ -149,11 +149,12 @@ fn move_pushables(
 
 fn move_player(
     mut commands: Commands,
-    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Player), Without<Obstacle>>,
-    obstacles: Query<&Position, Or<(With<Obstacle>, With<Pushable>)>>,
+    mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Player), (Without<Obstacle>, Without<Pushable>)>,
+    walls: Query<&Position, With<Obstacle>>,
+    pushables: Query<&Position, With<Pushable>>,
 ) {
     for (ent, int_pos, mut pos, _) in wants_to_move.iter_mut() {
-        if !obstacles.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
+        if !walls.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
             pos.x = int_pos.x;
             pos.y = int_pos.y;
         } else {
@@ -280,9 +281,9 @@ fn main() {
         .add_startup_stage("init_level", SystemStage::single(init_level))
         .add_startup_system(setup)
         .add_system(movement_input.label(SokobanStages::Input))
-        .add_system(check_pushable.label(SokobanStages::PushableDetection))
-        .add_system(move_pushables.label(SokobanStages::MovementPushable))
-        .add_system(move_player.label(SokobanStages::MovementPlayer))
+        .add_system(check_pushable.label(SokobanStages::PushableDetection).after(SokobanStages::Input))
+        .add_system(move_pushables.label(SokobanStages::MovementPushable).after(SokobanStages::PushableDetection))
+        .add_system(move_player.label(SokobanStages::MovementPlayer).after(SokobanStages::MovementPushable))
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
