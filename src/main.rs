@@ -1,3 +1,4 @@
+use bevy::diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin};
 use bevy::ecs::event::Events;
 use bevy::math::*;
 use bevy::prelude::*;
@@ -58,7 +59,46 @@ fn setup(
         wall_locations: walls,
         pushable_locations: vec![IVec2::new(2, 2), IVec2::new(3, 3), IVec2::new(3, 4)],
         goal_locations: vec![IVec2::new(1, 4)],
-    })
+    });
+}
+
+
+fn setup_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    commands.spawn_bundle(UiCameraBundle::default());
+
+    commands
+        .spawn_bundle(TextBundle {
+            style: Style {
+                align_self: AlignSelf::FlexEnd,
+                ..Default::default()
+            },
+            text: Text {
+                // Construct a `Vec` of `TextSection`s
+                sections: vec![
+                    TextSection {
+                        value: "FPS: ".to_string(),
+                        style: TextStyle {
+                            font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                            font_size: 60.0,
+                            color: Color::WHITE,
+                        },
+                    },
+                    TextSection {
+                        value: "".to_string(),
+                        style: TextStyle {
+                            font: asset_server.load("fonts/FiraSans-Medium.ttf"),
+                            font_size: 60.0,
+                            color: Color::GOLD,
+                        },
+                    },
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        }).insert(FpsText);
 }
 
 fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands) {
@@ -74,6 +114,21 @@ fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands)
         });
     }
 }
+
+fn text_update_system(diagnostics: Res<Diagnostics>, mut query: Query<&mut Text, With<FpsText>>) {
+    for mut text in query.iter_mut() {
+        if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+            if let Some(average) = fps.average() {
+                // Update the value of the second section
+                text.sections[1].value = format!("{:.2}", average);
+            }
+        }
+    }
+}
+
+// A unit struct to help identify the FPS UI component, since there may be many Text components
+#[derive(Component)]
+struct FpsText;
 
 #[derive(Component, Debug)]
 struct Player;
@@ -182,7 +237,6 @@ fn check_pushable(
     }
 }
 
-
 fn init_player(mut commands: Commands, materials: Res<Materials>) {
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -271,11 +325,13 @@ fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
             title: "r_sokoban".to_string(),
-            width: 640.0,
-            height: 480.0,
+            width: 800.0,
+            height: 600.0,
+            vsync: false,
             ..Default::default()
         })
         .add_startup_system(setup)
+        .add_startup_system(setup_ui)
         .add_startup_stage("init_player", SystemStage::single(init_player))
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
         .add_startup_stage("init_level", SystemStage::single(init_level))
@@ -287,5 +343,7 @@ fn main() {
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
+        .add_plugin(FrameTimeDiagnosticsPlugin)
+        .add_system(text_update_system)
         .run()
 }
