@@ -60,6 +60,8 @@ fn setup(
         pushable_locations: vec![IVec2::new(2, 2), IVec2::new(3, 3), IVec2::new(3, 4)],
         goal_locations: vec![IVec2::new(1, 4)],
     });
+
+    commands.spawn().insert(AmountOfMoves(0));
 }
 
 
@@ -99,6 +101,42 @@ fn setup_ui(
             },
             ..Default::default()
         }).insert(FpsText);
+
+    commands
+        .spawn_bundle(TextBundle {
+            style: Style {
+                align_self: AlignSelf::FlexEnd,
+                position_type: PositionType::Absolute,
+                position: Rect {
+                    bottom: Val::Px(5.0),
+                    right: Val::Px(15.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            text: Text {
+                sections: vec![
+                    TextSection {
+                        value: "amount of moves: ".to_string(),
+                        style: TextStyle {
+                            font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                            font_size: 20.0,
+                            color: Color::WHITE,
+                        },
+                    },
+                    TextSection {
+                        value: "0".to_string(),
+                        style: TextStyle {
+                            font: asset_server.load("fonts/FiraSans-Medium.ttf"),
+                            font_size: 20.0,
+                            color: Color::GOLD,
+                        },
+                    },
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        }).insert(AmountOfMovesText);
 }
 
 fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands) {
@@ -126,12 +164,31 @@ fn text_update_system(diagnostics: Res<Diagnostics>, mut query: Query<&mut Text,
     }
 }
 
-// A unit struct to help identify the FPS UI component, since there may be many Text components
+fn text_update_amount_of_moves(
+    amount_component: Query<&AmountOfMoves, Changed<AmountOfMoves>>,
+    mut amount_text: Query<&mut Text, With<AmountOfMovesText>>,
+) {
+    if let Some(comp) = amount_component.iter().next() {
+        if let Some(mut text) = amount_text.iter_mut().next() {
+            text.sections[1].value = comp.0.to_string()
+        }
+
+    }
+}
+
 #[derive(Component)]
 struct FpsText;
 
+#[derive(Component)]
+struct AmountOfMovesText;
+
+#[derive(Component)]
+struct AmountOfMoves(i32);
+
 #[derive(Component, Debug)]
 struct Player;
+
+struct PlayerMovedEvent;
 
 #[derive(Component)]
 struct Obstacle;
@@ -205,6 +262,7 @@ fn move_pushables(
 fn move_player(
     mut commands: Commands,
     mut wants_to_move: Query<(Entity, &IntendedPosition, &mut Position, &Player), (Without<Obstacle>, Without<Pushable>)>,
+    mut moved_event_writer: EventWriter<PlayerMovedEvent>,
     walls: Query<&Position, With<Obstacle>>,
     pushables: Query<&Position, With<Pushable>>,
 ) {
@@ -212,6 +270,7 @@ fn move_player(
         if !walls.iter().any(|wall| int_pos.x == wall.x && int_pos.y == wall.y) {
             pos.x = int_pos.x;
             pos.y = int_pos.y;
+            moved_event_writer.send(PlayerMovedEvent);
         } else {
             //todo bug here
             println!("PLAYER wall collided, not moving");
@@ -279,6 +338,18 @@ fn snap_position_to_grid(mut q: Query<(&mut Transform, &Position)>, grid: Res<Gr
     }
 }
 
+fn adjust_score(
+    mut player_moved_reader: EventReader<PlayerMovedEvent>,
+    mut moves_amount: Query<&mut AmountOfMoves>,
+) {
+    if player_moved_reader.iter().next().is_some() {
+        if let Some(mut amount) = moves_amount.iter_mut().next() {
+            amount.0 += 1;
+        }
+    }
+
+}
+
 fn init_level(
     mut commands: Commands,
     materials: Res<Materials>,
@@ -330,6 +401,7 @@ fn main() {
             vsync: false,
             ..Default::default()
         })
+        .add_event::<PlayerMovedEvent>()
         .add_startup_system(setup)
         .add_startup_system(setup_ui)
         .add_startup_stage("init_player", SystemStage::single(init_player))
@@ -345,5 +417,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(FrameTimeDiagnosticsPlugin)
         .add_system(text_update_system)
+        .add_system(adjust_score)
+        .add_system(text_update_amount_of_moves)
         .run()
 }
