@@ -53,15 +53,19 @@ fn setup(
         walls.push(IVec2::new(grid.bounds.x - 1, y));
     }
 
+    let goals = vec![IVec2::new(2, 4)];
+
     commands.insert_resource(grid);
     //todo: extract this to file load and support different levels
     commands.insert_resource(Level {
         wall_locations: walls,
-        pushable_locations: vec![IVec2::new(2, 2), IVec2::new(3, 3), IVec2::new(3, 4)],
-        goal_locations: vec![IVec2::new(1, 4)],
+        pushable_locations: vec![IVec2::new(2, 2)],
+        goal_locations: goals.clone(),
     });
 
     commands.spawn().insert(AmountOfMoves(0));
+
+    info!("goals to hit: {}", goals.len())
 }
 
 
@@ -102,41 +106,40 @@ fn setup_ui(
             ..Default::default()
         }).insert(FpsText);
 
-    commands
-        .spawn_bundle(TextBundle {
-            style: Style {
-                align_self: AlignSelf::FlexEnd,
-                position_type: PositionType::Absolute,
-                position: Rect {
-                    bottom: Val::Px(5.0),
-                    right: Val::Px(15.0),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            text: Text {
-                sections: vec![
-                    TextSection {
-                        value: "amount of moves: ".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/FiraSans-Bold.ttf"),
-                            font_size: 20.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "0".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/FiraSans-Medium.ttf"),
-                            font_size: 20.0,
-                            color: Color::GOLD,
-                        },
-                    },
-                ],
+    commands.spawn_bundle(TextBundle {
+        style: Style {
+            align_self: AlignSelf::FlexEnd,
+            position_type: PositionType::Absolute,
+            position: Rect {
+                bottom: Val::Px(5.0),
+                right: Val::Px(15.0),
                 ..Default::default()
             },
             ..Default::default()
-        }).insert(AmountOfMovesText);
+        },
+        text: Text {
+            sections: vec![
+                TextSection {
+                    value: "amount of moves: ".to_string(),
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font_size: 20.0,
+                        color: Color::WHITE,
+                    },
+                },
+                TextSection {
+                    value: "0".to_string(),
+                    style: TextStyle {
+                        font: asset_server.load("fonts/FiraSans-Medium.ttf"),
+                        font_size: 20.0,
+                        color: Color::GOLD,
+                    },
+                },
+            ],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).insert(AmountOfMovesText);
 }
 
 fn window_resize(mut events: EventReader<WindowResized>, mut commands: Commands) {
@@ -172,7 +175,6 @@ fn text_update_amount_of_moves(
         if let Some(mut text) = amount_text.iter_mut().next() {
             text.sections[1].value = comp.0.to_string()
         }
-
     }
 }
 
@@ -252,7 +254,7 @@ fn move_pushables(
             pos.x = int_pos.x;
             pos.y = int_pos.y;
         } else {
-            println!("pushable: wall collided, not moving");
+            info!("pushable: wall collided, not moving");
         }
 
         commands.entity(ent).remove::<IntendedPosition>();
@@ -273,7 +275,7 @@ fn move_player(
             moved_event_writer.send(PlayerMovedEvent);
         } else {
             //todo bug here
-            println!("PLAYER wall collided, not moving");
+            info!("PLAYER wall collided, not moving");
         }
 
         commands.entity(ent).remove::<IntendedPosition>();
@@ -347,7 +349,6 @@ fn adjust_score(
             amount.0 += 1;
         }
     }
-
 }
 
 fn init_level(
@@ -407,7 +408,6 @@ fn main() {
         .add_startup_stage("init_player", SystemStage::single(init_player))
         .add_startup_stage("init_grid", SystemStage::single(init_grid))
         .add_startup_stage("init_level", SystemStage::single(init_level))
-        .add_startup_system(setup)
         .add_system(movement_input.label(SokobanStages::Input))
         .add_system(check_pushable.label(SokobanStages::PushableDetection).after(SokobanStages::Input))
         .add_system(move_pushables.label(SokobanStages::MovementPushable).after(SokobanStages::PushableDetection))

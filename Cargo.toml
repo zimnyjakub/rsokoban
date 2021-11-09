@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 #bevy = { git = "https://github.com/bevyengine/bevy", rev = "f4cfcc0e44b91446beb49a1dbe9965cb7bcde059", features = ["dynamic"] }
-bevy = { git = "https://github.com/bevyengine/bevy", rev = "f4cfcc0e44b91446beb49a1dbe9965cb7bcde059"  }
+bevy = { git = "https://github.com/bevyengine/bevy", rev = "f4cfcc0e44b91446beb49a1dbe9965cb7bcde059" }
 rand = "0.8.4"
