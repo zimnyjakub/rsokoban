@@ -298,6 +298,22 @@ fn check_pushable(
     }
 }
 
+fn check_goals(
+    mut commands: Commands,
+    just_moved: Query<(&IntendedPosition, &Position), (Without<Pushable>, With<Player>)>,
+    pushables: Query<(Entity, &Position), With<Pushable>>,
+) {
+    for (int_pos, pos) in wants_to_move.iter() {
+        let pushable = pushables.iter().find(|(entity, pushable)| int_pos.x == pushable.x && int_pos.y == pushable.y);
+        if let Some((ent, pushable)) = pushable {
+            commands.entity(ent).insert(IntendedPosition {
+                x: pushable.x + (pushable.x - pos.x),
+                y: pushable.y + (pushable.y - pos.y),
+            });
+        }
+    }
+}
+
 fn init_player(mut commands: Commands, materials: Res<Materials>) {
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -412,6 +428,7 @@ fn main() {
         .add_system(check_pushable.label(SokobanStages::PushableDetection).after(SokobanStages::Input))
         .add_system(move_pushables.label(SokobanStages::MovementPushable).after(SokobanStages::PushableDetection))
         .add_system(move_player.label(SokobanStages::MovementPlayer).after(SokobanStages::MovementPushable))
+        .add_system(check_goals)
         .add_system_to_stage(CoreStage::PostUpdate, snap_position_to_grid)
         .add_system(window_resize)
         .add_plugins(DefaultPlugins)
